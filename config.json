@@ -1,0 +1,18 @@
+{
+  "seed": 13,
+  "classes": 2,
+  "device": "cpu",
+  "epochs": 200,
+  "patience": 15,
+  "batch_size": 32,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0001,
+  "variant": "full",
+  "width": 64,
+  "random_deletions": 1000,
+  "protocol": "loco",
+  "local_epochs": 5,
+  "proximal_weight": 0.01,
+  "alignment_weight": 0.1,
+  "personal_weight": 0.1
+}
