@@ -1,4 +1,5 @@
 import argparse
+import copy
 import json
 import time
 from pathlib import Path
@@ -72,6 +73,16 @@ def run(c, out):
     model.load_state_dict(torch.load(out / 'model.pt', map_location=c['device'], weights_only=True))
     model.eval()
     model.compute_diagnostics = True
+    personalized = {}
+    if c['variant'] == 'personalized' and c['protocol'] != 'loco':
+        observed = set(data['corpus'][data['split'] == 'train'])
+        for corpus in np.unique(data['corpus'][data['split'] == 'test']):
+            if corpus in observed:
+                client = copy.deepcopy(model)
+                client.load_state_dict(torch.load(out / f'client_{corpus}.pt', map_location=c['device'], weights_only=True))
+                personalized[str(corpus)] = client.eval()
+    test_corpora = data['corpus'][data['split'] == 'test']
+    cursor = 0
     collected, timings = {}, []
     with torch.no_grad():
         for batch in DataLoader(Arrays(data, 'test'), batch_size=c['batch_size']):
@@ -79,7 +90,17 @@ def run(c, out):
             if c['device'].startswith('cuda'):
                 torch.cuda.synchronize()
             start = time.perf_counter()
-            result = model(batch)
+            if personalized:
+                corpora = test_corpora[cursor:cursor + len(batch['y'])]
+                result = {}
+                for corpus in np.unique(corpora):
+                    indices = torch.as_tensor(np.flatnonzero(corpora == corpus), device=c['device'])
+                    local = personalized.get(str(corpus), model)({k: v[indices] for k, v in batch.items()})
+                    for key, value in local.items():
+                        result.setdefault(key, value.new_empty((len(batch['y']), *value.shape[1:])))[indices] = value
+            else:
+                result = model(batch)
+            cursor += len(batch['y'])
             if c['device'].startswith('cuda'):
                 torch.cuda.synchronize()
             timings.append((time.perf_counter() - start) * 1000 / len(batch['y']))

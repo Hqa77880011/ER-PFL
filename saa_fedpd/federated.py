@@ -17,8 +17,9 @@ def train(c, out):
         raise ValueError('Federated data additionally requires corpus,age,sex')
     source = d['split'] == 'train'
     heldout = d['split'] == 'test'
-    if c['protocol'] == 'loco' and set(d['corpus'][source]) & set(d['corpus'][heldout]):
-        raise ValueError('LOCO test corpus must be absent from training')
+    development = source | (d['split'] == 'val')
+    if c['protocol'] == 'loco' and set(d['corpus'][development]) & set(d['corpus'][heldout]):
+        raise ValueError('LOCO test corpus must be absent from training and validation')
     x, y = torch.tensor(d['x'], dtype=torch.float32), torch.tensor(d['y'], dtype=torch.long)
     _, unique_ids = np.unique(d['group'][source], return_index=True)
     median_age = np.median(d['age'][source][unique_ids])
@@ -93,6 +94,7 @@ def train(c, out):
             break
     pd.DataFrame(curve).to_csv(out / 'learning.csv', index=False)
     if c['variant'] == 'personalized':
+        model.load_state_dict(torch.load(out / 'model.pt', map_location='cpu', weights_only=True))
         for corpus in np.unique(d['corpus'][source]):
             ids = np.flatnonzero(source & (d['corpus'] == corpus))
             personal = copy.deepcopy(model).train()
